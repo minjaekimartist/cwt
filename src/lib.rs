@@ -21,7 +21,6 @@ pub fn ricker_wavelet(time: f64, scale: f64) -> Complex<f64>
     let gauss_env = (1.0 - 0.5 * t_scaled * t_scaled) * (-0.25 * t_scaled * t_scaled).exp();
     Complex::new(normalization * gauss_env, 0.0)
 }
-
 /// Haar Wavelet
 #[inline]
 pub fn haar_wavelet(time: f64, scale: f64) -> Complex<f64>
@@ -40,7 +39,6 @@ pub fn haar_wavelet(time: f64, scale: f64) -> Complex<f64>
         Complex::new(0.0, 0.0)
     }
 }
-
 /// Gabor wavelet function
 #[inline]
 pub fn gabor_wavelet(time: f64, scale: f64) -> Complex<f64>
@@ -53,44 +51,87 @@ pub fn gabor_wavelet(time: f64, scale: f64) -> Complex<f64>
     normalization * gauss_env * oscillatory
 }
 
-/// Continuous Wavelet Transform (CWT)
-pub fn cwt(input: &[f64], scales: &[f64], wavelet: fn(f64, f64) -> Complex<f64>, sample_rate: f64) -> Vec<Vec<Complex<f64>>>
+#[derive(Clone, Copy)]
+pub enum Wavelet
 {
-    let mut output = vec![vec![Complex::new(0.0, 0.0); input.len()]; scales.len()];
-
-    for (i, &scale) in scales.iter().enumerate()
+    Morlet,
+    Ricker,
+    Haar,
+    Gabor
+}
+impl Wavelet
+{
+    pub fn wavelet(self) -> fn(f64, f64) -> Complex<f64>
     {
-        for (j, &val) in input.iter().enumerate()
+        match self
         {
-            no_denormals(||
-            {
-                let time = j as f64 / sample_rate;
-                let wavelet_value = wavelet(time, scale);
-                output[i][j] = wavelet_value * Complex::new(val, 0.0);
-            })
+            Wavelet::Morlet => morlet_wavelet,
+            Wavelet::Ricker => ricker_wavelet,
+            Wavelet::Haar => haar_wavelet,
+            Wavelet::Gabor => gabor_wavelet
         }
     }
-    output
 }
 
-/// Inverse Continuous Wavelet Transform (iCWT)
-pub fn icwt(input: &[Vec<Complex<f64>>], scales: &[f64], wavelet: fn(f64, f64) -> Complex<f64>, sample_rate: f64) -> Vec<f64>
+pub struct Transformer
 {
-    let mut output = vec![0.0; input[0].len()];
-
-    for (i, &scale) in scales.iter().enumerate()
+    wavelet : Wavelet,
+    scales : Vec<f64>,
+    pub frequency_domain : Vec<Vec<Complex<f64>>>,
+    sample_rate : f64
+}
+impl Transformer
+{
+    pub fn new(wavelet: Wavelet, scales: usize, sample_rate : f64) -> Self
     {
-        for j in 0..input[i].len()
+        Self
         {
-            no_denormals(||
-            {
-                let time = j as f64 / sample_rate;
-                let wavelet_value = wavelet(time, scale);
-                output[j] += input[i][j].re * wavelet_value.re / (scale.powf(scale.sqrt()) / std::f64::consts::PI.sqrt());
-            })
+            wavelet,
+            scales : vec![0.0;scales],
+            frequency_domain : vec![vec![]],
+            sample_rate
         }
     }
-    output
+    /// Continuous Wavelet Transform (CWT)
+    pub fn cwt(&mut self, input : &[f64])
+    {
+        self.frequency_domain = vec![vec![Complex::default(); input.len()]; self.scales.len()];
+
+        for i in 0..self.scales.len()
+        {
+            for (j, &val) in input.iter().enumerate()
+            {
+                no_denormals(||
+                {
+                    let time = j as f64 / self.sample_rate;
+                    let wavelet_value = self.wavelet.wavelet()(time, self.scales[i]);
+                    self.frequency_domain[i][j] = wavelet_value * Complex::new(val, 0.0);
+                })
+            }
+        }
+    }
+    /// Inverse Continuous Wavelet Transform (iCWT)
+    pub fn icwt(&self, output : &mut [f64])
+    {
+        if output.len() != self.frequency_domain[0].len()
+        {
+            eprintln!("Output array length does not match input array length");
+            return
+        }
+    
+        for (i, &scale) in self.scales.iter().enumerate()
+        {
+            for j in 0..self.frequency_domain[i].len()
+            {
+                no_denormals(||
+                {
+                    let time = j as f64 / self.sample_rate;
+                    let wavelet_value = self.wavelet.wavelet()(time, scale);
+                    output[j] += self.frequency_domain[i][j].re * wavelet_value.re / (scale.powf(scale.sqrt()) / std::f64::consts::PI.sqrt());
+                })
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -101,26 +142,21 @@ mod tests
     #[test]
     fn it_works()
     {
-        let sample_rate = 48000.0;
-        let frequency = 10000.0;
-        let duration_secs = 1.0;
-        let num_samples = (duration_secs * sample_rate) as usize;
-    
         // Generate a sample signal (sine wave)
-        let time: Vec<f64> = (0..num_samples).map(|i| i as f64 / sample_rate).collect();
-        let signal: Vec<f64> = time.iter().map(|&t| (2.0 * std::f64::consts::PI * frequency * t).sin()).collect();
-    
-        // Define scales for wavelet analysis
-        let scales: Vec<f64> = (1..128).map(|i| i as f64).collect(); // Adjust as needed
-    
-        // Perform Continuous Wavelet Transform (CWT)
-        let coefficients = cwt(&signal, &scales, ricker_wavelet, sample_rate);
-    
-        // Perform Inverse Continuous Wavelet Transform (iCWT)
-        let reconstructed_signal = icwt(&coefficients, &scales, ricker_wavelet, sample_rate);
+        let duration_secs = 1.0;
+        let sample_rate = 48000.0;
+        let num_samples = (duration_secs * sample_rate) as usize;
+        let frequency = 1000.0;
+        let input: Vec<f64> = (0..num_samples).into_iter().map(|index| (2.0 * std::f64::consts::PI * frequency * index as f64).sin()).collect();
+        let mut output = vec![0.0; input.len()];
+
+        // Perform CWT and iCWT
+        let mut transformer = Transformer::new(Wavelet::Morlet, 128, sample_rate);
+        transformer.cwt(&input);
+        transformer.icwt(&mut output);
     
         // Print some results for verification
-        println!("Original Signal (first 10 samples): {:?}", &signal[..10]);
-        println!("Reconstructed Signal (first 10 samples): {:?}", &reconstructed_signal[..10]);
+        println!("Original Signal (first 10 samples): {:?}", &input[..10]);
+        println!("Reconstructed Signal (first 10 samples): {:?}", &output[..10]);
     }
 }

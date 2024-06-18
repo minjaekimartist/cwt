@@ -149,15 +149,15 @@ mod tests
     fn it_works()
     {
         // Generate a sample signal (sine wave)
-        let duration_secs = 1.0;
+        let duration_secs = 0.01;
         let sample_rate = 48000.0;
         let num_samples = (duration_secs * sample_rate) as usize;
-        let frequency = 1000.0;
-        let input: Vec<f64> = (0..num_samples).into_iter().map(|index| (2.0 * std::f64::consts::PI * frequency * index as f64).sin()).collect();
+        let frequency = 10000.0;
+        let input: Vec<f64> = (0..num_samples).into_iter().map(|index| (2.0 * std::f64::consts::PI * frequency * index as f64 / sample_rate).sin()).collect();
         let mut output = vec![0.0; input.len()];
 
         // Perform CWT and iCWT
-        let mut transformer = Transformer::new(Wavelet::Morlet, 128, sample_rate);
+        let mut transformer = Transformer::new(Wavelet::Morlet, 16, sample_rate);
         transformer.cwt(&input);
         transformer.icwt(&mut output);
     

@@ -3,7 +3,7 @@ use no_denormals::*;
 
 /// Morlet wavelet function
 #[inline]
-pub fn morlet_wavelet(time: f64, _scale: f64) -> Complex<f64>
+fn morlet_wavelet(time: f64, _scale: f64) -> Complex<f64>
 {
     let sigma = 0.925f64;
     let omega_0 = 6.0;
@@ -14,7 +14,7 @@ pub fn morlet_wavelet(time: f64, _scale: f64) -> Complex<f64>
 }
 /// Mexican Hat (Ricker) Wavelet
 #[inline]
-pub fn ricker_wavelet(time: f64, scale: f64) -> Complex<f64>
+fn ricker_wavelet(time: f64, scale: f64) -> Complex<f64>
 {
     let normalization = (2.0 / (std::f64::consts::PI.sqrt() * 2.81 * scale.sqrt())).sqrt();
     let t_scaled = time / scale;
@@ -23,7 +23,7 @@ pub fn ricker_wavelet(time: f64, scale: f64) -> Complex<f64>
 }
 /// Haar Wavelet
 #[inline]
-pub fn haar_wavelet(time: f64, scale: f64) -> Complex<f64>
+fn haar_wavelet(time: f64, scale: f64) -> Complex<f64>
 {
     let t_scaled = time / scale;
     if t_scaled >= 0.0 && t_scaled < 0.5
@@ -41,7 +41,7 @@ pub fn haar_wavelet(time: f64, scale: f64) -> Complex<f64>
 }
 /// Gabor wavelet function
 #[inline]
-pub fn gabor_wavelet(time: f64, scale: f64) -> Complex<f64>
+fn gabor_wavelet(time: f64, scale: f64) -> Complex<f64>
 {
     let sigma = scale / 2.0f64.sqrt();
     let normalization = 1.0 / (sigma.sqrt() * (std::f64::consts::PI).sqrt());
@@ -61,6 +61,7 @@ pub enum Wavelet
 }
 impl Wavelet
 {
+    /// Get the wavelet function.
     pub fn wavelet(self) -> fn(f64, f64) -> Complex<f64>
     {
         match self
@@ -77,11 +78,12 @@ pub struct Transformer
 {
     wavelet : Wavelet,
     scales : Vec<f64>,
-    pub frequency_domain : Vec<Vec<Complex<f64>>>,
+    frequency_domain : Vec<Vec<Complex<f64>>>,
     sample_rate : f64
 }
 impl Transformer
 {
+    /// Create a new Transformer instance.
     pub fn new(wavelet: Wavelet, scales: usize, sample_rate : f64) -> Self
     {
         Self
@@ -92,7 +94,11 @@ impl Transformer
             sample_rate
         }
     }
-    /// Continuous Wavelet Transform (CWT)
+    /// Show analysis result.
+    pub fn frequency_domain<'a>(&'a self) -> &'a Vec<Vec<Complex<f64>>> { &self.frequency_domain }
+    /// Mutable analysis result.
+    pub fn frequency_domain_mut<'a>(&'a mut self) -> &'a mut Vec<Vec<Complex<f64>>> { &mut self.frequency_domain }
+    /// Continuous Wavelet Transform (CWT).
     pub fn cwt(&mut self, input : &[f64])
     {
         self.frequency_domain = vec![vec![Complex::default(); input.len()]; self.scales.len()];
@@ -110,7 +116,7 @@ impl Transformer
             }
         }
     }
-    /// Inverse Continuous Wavelet Transform (iCWT)
+    /// Inverse Continuous Wavelet Transform (iCWT).
     pub fn icwt(&self, output : &mut [f64])
     {
         if output.len() != self.frequency_domain[0].len()

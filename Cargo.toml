@@ -1,0 +1,8 @@
+[package]
+name = "cwt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+num-complex = "0.4.6"
+no_denormals = "0.1.2"
